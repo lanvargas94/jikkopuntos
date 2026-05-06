@@ -1,0 +1,23 @@
+/**
+ * Departamento funcional en Jikkosoft (distinto del rol de sistema ADMIN/COLLABORATOR).
+ */
+export const ORGANIZATIONAL_DEPARTMENT = {
+  PRODUCT: 'PRODUCT',
+  OPERATIONS: 'OPERATIONS',
+  ADMINISTRATIVE: 'ADMINISTRATIVE',
+  TECHNOLOGY: 'TECHNOLOGY',
+} as const;
+
+export type OrganizationalDepartmentCode =
+  (typeof ORGANIZATIONAL_DEPARTMENT)[keyof typeof ORGANIZATIONAL_DEPARTMENT];
+
+export const ORGANIZATIONAL_DEPARTMENT_LABEL: Record<string, string> = {
+  [ORGANIZATIONAL_DEPARTMENT.PRODUCT]: 'Producto',
+  [ORGANIZATIONAL_DEPARTMENT.OPERATIONS]: 'Operaciones',
+  [ORGANIZATIONAL_DEPARTMENT.ADMINISTRATIVE]: 'Administrativo',
+  [ORGANIZATIONAL_DEPARTMENT.TECHNOLOGY]: 'Tecnología',
+};
+
+export const ORGANIZATIONAL_DEPARTMENT_CODES = Object.values(
+  ORGANIZATIONAL_DEPARTMENT,
+) as string[];

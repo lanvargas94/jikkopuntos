@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Valores esperados: ADMIN | COLLABORATOR
+model Role {
+  id    String @id @default(cuid())
+  code  String @unique
+  users User[]
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  idNumber             String    @unique
+  idIssueDate          DateTime
+  mustChangePassword   Boolean   @default(false)
+  isActive             Boolean   @default(true)
+  roleId               String
+  role                 Role      @relation(fields: [roleId], references: [id])
+  profile              UserProfile?
+  profileChangeLogs    ProfileChangeLog[]
+  passwordHistories    PasswordHistory[]
+  securityAuditLogs    SecurityAuditLog[]
+  refreshTokens        RefreshToken[]
+  formDefinitions      FormDefinition[] @relation("FormCreator")
+  formResponses        FormResponse[]
+  jikkoAccount         JikkoPointAccount?
+  jikkoTransactions    JikkoPointTransaction[]
+  approvalRequestsAsTarget    ApprovalRequest[] @relation("ApprovalTarget")
+  approvalRequestsAsRequester ApprovalRequest[] @relation("ApprovalRequestedBy")
+  approvalRequestsAsReviewer  ApprovalRequest[] @relation("ApprovalReviewedBy")
+  notifications               Notification[]
+  passwordResetTokens         PasswordResetToken[]
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([roleId])
+}
+
+/// Token de un solo uso para restablecer contraseña (hash del token en BD).
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Hoja de vida del colaborador (extensible: adjuntos/certificaciones en tablas futuras)
+model UserProfile {
+  userId                 String   @id
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Cargo o rol actual en Jikkosoft (asignado por RR.HH.)
+  jobTitle               String?
+  /// Área o dependencia
+  area                   String?
+  personalEmail          String?
+  phoneMobile            String?
+  phoneAlt               String?
+  address                String?
+  city                   String?
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+  emergencyRelationship  String?
+  professionalSummary    String?
+  educationBackground    String?
+  previousWorkExperience String?
+  skills                 String?
+  linkedInUrl            String?
+  profilePhotoUrl        String?
+  /// Entidad promotora de salud (EPS), texto libre.
+  eps                    String?
+  /// Aseguradora de riesgos laborales (ARL), texto libre.
+  arl                    String?
+  /// PRODUCT | OPERATIONS | ADMINISTRATIVE | TECHNOLOGY (asignado por RR.HH.)
+  organizationalDepartment String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model ProfileChangeLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorUserId String
+  changes     String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Historial de contrasenas (solo hashes)
+model PasswordHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hash      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+/// Auditoría de seguridad y negocio (acciones sensibles; metadata JSON acotado).
+model SecurityAuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorUserId String
+  action      String
+  metadata    String?
+  /// Cliente (proxy: X-Forwarded-For si aplica).
+  ipAddress   String?
+  /// User-Agent recortado (p. ej. login).
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// Sesiones de refresh JWT (jti + revocación / rotación)
+model RefreshToken {
+  id        String @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jti       String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model JikkoPointAccount {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Ledger append-only: amount con signo (+ abono, - cargo). balance en cuenta se mantiene en la misma transacción.
+model JikkoPointTransaction {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount         Int
+  movementType   String        @default("FORM_REWARD")
+  sourceType     String?
+  sourceId       String?
+  reason         String
+  /// Justificación textual en canjes administrados (descanso, etc.).
+  justification  String?
+  /// Ruta relativa al directorio de uploads (p. ej. jikkopuntos-redemptions/uuid.pdf).
+  attachmentPath String?
+  formResponseId String?       @unique
+  formResponse   FormResponse? @relation(fields: [formResponseId], references: [id])
+  jikkopuntosApprovalDetail ApprovalJikkopuntosDetail?
+  createdAt      DateTime      @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+/// status: DRAFT | PUBLISHED | CLOSED
+model FormDefinition {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  status       String   @default("DRAFT")
+  /// Base para métricas / dashboards (última publicación).
+  publishedAt  DateTime?
+  /// Cuando el admin cierra el formulario a nuevas respuestas.
+  closedAt     DateTime?
+  shareToken   String?  @unique
+  /// Slug opcional para URL legible (unico). Ej: encuesta-bienestar
+  publicSlug   String?  @unique
+  /// Si es false, un colaborador solo puede enviar una vez.
+  allowMultipleResponses Boolean @default(false)
+  pointsReward Int      @default(0)
+  /// Esquema legado (fase anterior); los formularios nuevos usan `questions`.
+  schemaJson   String?
+  createdById  String
+  createdBy    User     @relation("FormCreator", fields: [createdById], references: [id])
+  questions    FormQuestion[]
+  responses    FormResponse[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([status])
+}
+
+/// Tipos MVP: TEXT_OPEN | SINGLE_SELECT | MULTI_SELECT (añadir más sin migración de enum: string + settingsJson)
+model FormQuestion {
+  id           String   @id @default(cuid())
+  formId       String
+  form         FormDefinition @relation(fields: [formId], references: [id], onDelete: Cascade)
+  sortOrder    Int      @default(0)
+  type         String
+  label        String
+  helpText     String?
+  required     Boolean  @default(false)
+  settingsJson String?
+  options      FormQuestionOption[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([formId])
+  @@index([formId, sortOrder])
+}
+
+model FormQuestionOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   FormQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sortOrder  Int          @default(0)
+  label      String
+  /// Valor estable enviado en respuestas (p. ej. id de fila o slug)
+  value      String
+  createdAt  DateTime     @default(now())
+
+  @@index([questionId])
+  @@index([questionId, sortOrder])
+}
+
+model FormResponse {
+  id          String   @id @default(cuid())
+  formId      String
+  form        FormDefinition @relation(fields: [formId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answersJson String
+  submittedAt DateTime @default(now())
+  transaction JikkoPointTransaction?
+
+  @@index([formId, userId])
+  @@index([userId])
+}
+
+/// Catálogo de recompensas canjeables con jikkopuntos (gestión admin, visibilidad colaborador con isPublished).
+model BenefitRewardTier {
+  id          String   @id @default(cuid())
+  label       String
+  jp          Int
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished])
+  @@index([jp, sortOrder])
+}
+
+/// Cabecera unificada de solicitudes RR.HH. (canjes JP, permisos, incapacidades).
+/// category: JIKKOPOINTS_REDEMPTION | LEAVE_PERMISSION | MEDICAL_LEAVE
+/// status: PENDING | APPROVED | REJECTED
+model ApprovalRequest {
+  id                String @id @default(cuid())
+  category          String
+  status            String    @default("PENDING")
+  targetUserId      String
+  targetUser        User      @relation("ApprovalTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  requestedByUserId String
+  requestedBy       User      @relation("ApprovalRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  justification     String?
+  attachmentPath    String?
+  reviewNote        String?
+  reviewedByUserId  String?
+  reviewedBy        User?     @relation("ApprovalReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  jikkopuntosDetail ApprovalJikkopuntosDetail?
+  leaveDetail         ApprovalLeaveDetail?
+  medicalLeaveDetail ApprovalMedicalLeaveDetail?
+
+  @@index([status, category])
+  @@index([targetUserId])
+  @@index([requestedByUserId])
+  @@index([createdAt])
+}
+
+/// Detalle canje jikkopuntos (beneficio catálogo o descanso). redemptionType: BENEFIT | REST
+model ApprovalJikkopuntosDetail {
+  approvalRequestId   String @id
+  approvalRequest     ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  redemptionType      String
+  benefitTierId       String?
+  restKind            String?
+  jpAmount            Int
+  ledgerTransactionId String? @unique
+  ledgerTransaction     JikkoPointTransaction? @relation(fields: [ledgerTransactionId], references: [id], onDelete: SetNull)
+}
+
+/// Permiso / licencia no remunerada u otros permisos laborales.
+model ApprovalLeaveDetail {
+  approvalRequestId String @id
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  leaveKind         String
+  startDate         DateTime
+  endDate           DateTime
+  notes             String?
+}
+
+/// Incapacidad médica (soporte obligatorio en cabecera.attachmentPath).
+model ApprovalMedicalLeaveDetail {
+  approvalRequestId String @id
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  startDate         DateTime
+  endDate           DateTime
+  clinicalSummary   String?
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
