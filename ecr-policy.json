@@ -1,0 +1,16 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowLightsailPull",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::884090048391:role/amazon/lightsail/us-east-1/containers/jikko-backend/private-repo-access/8d8772linauo76vb6b6ltjlatl0diakccthg2dckds8dpfsn95rg"
+            },
+            "Action": [
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer"
+            ]
+        }
+    ]
+}

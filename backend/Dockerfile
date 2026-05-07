@@ -23,4 +23,4 @@ EXPOSE 4000
 
 ENV PORT=4000
 
-CMD ["sh", "-c", "mkdir -p /data && npx prisma db push && node dist/src/main.js"]
+CMD ["sh", "-c", "mkdir -p /data && npx prisma db push && (npx prisma db seed || echo 'Seed omitido o ya ejecutado') && node dist/src/main.js"]
